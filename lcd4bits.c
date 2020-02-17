@@ -189,8 +189,6 @@ void DisplayVolt(unsigned int volts) {
     unsigned char digits[3];
     unsigned char i;
     
-    lcd_clear();
-    
     // convert voltage value to an array of digits
     for (i = 0; i < 3; i++) {
         digits[2 - i] = (volts % 10);
@@ -203,5 +201,4 @@ void DisplayVolt(unsigned int volts) {
     //put last 2 digits after decimal point
     lcd_putch(digits[1] + 0x30);
     lcd_putch(digits[2] + 0x30);
-    lcd_puts(" Volts");
 }
