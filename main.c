@@ -37,14 +37,85 @@ void Timer_CCP_init(void);
 
 unsigned long timer = 0;
 unsigned char currentlyTiming = 0;
+unsigned char enteredInches = 0;
+unsigned long inches = 0;
+unsigned char inchDigits[5]; 
 
 void main(void) {
     lcd_init();
     ADC_init();
     Timer_CCP_init();
     TRISB0 = 1;
+    TRISB1 = 1;
+    TRISB2 = 1;
     nRBPU = 0;
     ANS12 = 0;
+    ANS8 = 0;
+    ANS10 = 0;
+    
+    
+    lcd_goto(0);
+    lcd_puts("Enter 0b Dist.");
+    for(int x = 0;x < 8; x++) {
+        lcd_goto(0x40);
+        lcd_putch(0x30 + (enteredInches & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>1) & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>2) & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>3) & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>4) & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>5) & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>6) & 0x01));
+        lcd_putch(0x30 + ((enteredInches>>7) & 0x01));
+        
+        while(RB1 == 1 && RB2 == 1);
+        for(int y = 0;y<6000;y++);//Debounce
+        if(RB1 == 0){//The 1 button is pressed
+            CARRY = 0;
+            enteredInches <<= 1;//Shift a 1 in
+            enteredInches++;
+
+        } if(RB2 == 0) {//The 0 button is pressed
+            CARRY = 0;
+            enteredInches <<= 1;//Shift a 0 in
+        }
+        while(RB1 == 0 || RB2 == 0);
+        for(int y = 0;y<6000;y++);//Debounce
+    }
+    
+    unsigned int fractional = 0;
+    unsigned long decimal = 0;
+        
+    decimal = (long)((enteredInches & 0xF8) >> 3)*10000;
+    
+    if(enteredInches & 0x01){//remainder 1/8 th
+        fractional += 1250; 
+    }if(enteredInches & 0x02){//remainder 1/4 th
+        fractional += 2500;
+    }if(enteredInches & 0x04){//remainder 1/2 th
+        fractional += 5000;
+    }
+    
+    inches = fractional + decimal;
+    unsigned long inchesC = inches/10;
+    //Extract inches as 5 decimal digits
+    for(char x = 0;x < 5;x++){
+        inchDigits[x] = inchesC % 10;  
+        inchesC = inchesC / 10;
+    }
+    
+    lcd_clear();
+    lcd_goto(0x09);
+    lcd_putch(inchDigits[4] + 0x30);
+    lcd_putch(inchDigits[3] + 0x30);
+    lcd_putch('.');
+    lcd_putch(inchDigits[2] + 0x30);
+    lcd_putch(inchDigits[1] + 0x30);
+    lcd_putch(inchDigits[0] + 0x30);
+    
+    while(RB0 == 1);//wait for start button to be pressed
+    for(int y = 0;y<6000;y++);//Debounce
+    while(RB0 == 0);//wait for start button to be released
+
     
     while(1){
         lcd_goto(0);
@@ -57,13 +128,13 @@ void main(void) {
         DisplayVolt(photoVal2);
         
         if(photoVal2 > 300 && currentlyTiming == 0){
-            //PEIE = 1;
+            PEIE = 1;
             timer = 0;
             currentlyTiming = 1;
         }
         
         if(photoVal1 > 300 && currentlyTiming == 1){
-            //PEIE = 0;
+            PEIE = 0;
             currentlyTiming = 0;
                     
             unsigned char digits[6];
@@ -102,7 +173,7 @@ void Timer_CCP_init() {
 	CCP1IF = 0;                 //Reset CCP1 flag
 	CCP1IE = 1;					//Unmask (enable) Compare Interrupt from CCP1
     
-    PEIE = 1;
+    PEIE = 0;
     GIE = 1;
 }
 
