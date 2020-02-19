@@ -152,7 +152,7 @@ void main(void) {
             isRecording = 0;
             
             //100*mph,2 decimal points
-            unsigned long mph = (unsigned long)(inches*360000)/(unsigned long)(12*528*timer);
+            unsigned long mph = (unsigned long)(inches*125)/(unsigned long)(22*timer);
 
             // convert mph value to an array of digits
             for (char i = 0; i < 5; i++) {
