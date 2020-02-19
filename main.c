@@ -51,8 +51,8 @@
 #include <xc.h>
 #include "lcd4bits.h"
 
-#define GateTransistor1 13
-#define GateTransistor2 11
+#define GateTrans1 13
+#define GateTrans2 11
 
 void ADC_init(void);
 void Timer_CCP_init(void);
@@ -62,11 +62,13 @@ void debounce(void);
 void __interrupt() interrupt_handler(void);
 
 unsigned long timer = 0;        //Each tick of this is 0.1 ms, records time
-unsigned char isRecording = 0;  //Variable only set when in the middle of a trial
 unsigned char enteredInches = 0;//char of user inches input 0bXXXXX.XXX
 unsigned long inches = 0;       //Inches * 10000 entered by the user in init
 unsigned char inchDigits[5];   
-unsigned char mphDigits[6];//characters representing mph
+unsigned char mphDigits[4];     //characters representing mph
+
+enum STATE {Init,Gate1,Gate2,Calc};
+enum STATE state = Init;
 
 void main(void) {
     lcd_init();
@@ -156,45 +158,59 @@ void main(void) {
     while(RB0 == 0);//wait for start button to be released
     
     while(1){//Main Loop
-        lcd_goto(0);
-        lcd_puts("1: ");
-        unsigned int photoVal1 = ((unsigned long)ADC_convert(GateTransistor1)*500)/1023;
-        DisplayVolt(photoVal1);
-        lcd_goto(0x40);
-        unsigned int photoVal2 = ((unsigned long)ADC_convert(GateTransistor2)*500)/1023;
-        lcd_puts("2: ");
-        DisplayVolt(photoVal2);
-        
-        if(photoVal2 > 300 && isRecording == 0){//First gate becomes blocked
-            PEIE = 1;
-            timer = 0;
-            isRecording = 1;
-        }
-        
-        if(photoVal1 > 300 && isRecording == 1){//Second gate becomes blocked
-            PEIE = 0;
-            isRecording = 0;
-            
-            //100*mph,2 decimal points
-            unsigned long mph = (unsigned long)(inches*125)/(unsigned long)(22*timer);
-
-            // convert mph value to an array of digits
-            for (char i = 0; i < 5; i++) {
-                mphDigits[4 - i] = (mph % 10);
-                mph = mph / 10;
+        switch(state){
+            case Init://Init
+                state = Gate1;
+                break;
+            case Gate1:{//Wait for Gate 1s
+                lcd_goto(0);
+                lcd_puts("1: ");
+                unsigned int photoVal1 = ((unsigned long)ADC_convert(GateTrans1)*500)/1023;
+                DisplayVolt(photoVal1);
+                if(photoVal1 > 300) {
+                    PEIE = 1;
+                    timer = 0;
+                    state = Gate2;
+                }
+                break;
             }
+            case Gate2:{//Wait for Gate 2
+                lcd_goto(0x40);
+                unsigned int photoVal2 = ((unsigned long)ADC_convert(GateTrans2)*500)/1023;
+                lcd_puts("2: ");
+                DisplayVolt(photoVal2);
+                if(photoVal2 > 300) {
+                    PEIE = 0;
+                    state = Calc;
+                }
+                break;
+            }
+            case Calc:{//Calculate MPH
+                //100*mph,2 decimal points
+                unsigned long mph = (unsigned long)(inches*125)/(unsigned long)(22*timer);
 
-            //output mph to LCD
-            lcd_goto(0x48);
-            lcd_puts("v:");
-            lcd_putch(mphDigits[0] + 0x30);
-            lcd_putch(mphDigits[1] + 0x30);
-            lcd_putch(mphDigits[2] + 0x30);
-            lcd_putch('.');//decimal point
-            lcd_putch(mphDigits[3] + 0x30);
-            lcd_putch(mphDigits[4] + 0x30);
-            
-            while(RB0 == 1);//Wait for restart button to be pressed
+                // convert mph value to an array of digits
+                for (char i = 0; i < 4; i++) {
+                    mphDigits[3 - i] = (mph % 10);
+                    mph = mph / 10;
+                }
+
+                //output mph to LCD
+                lcd_goto(0x48);
+                lcd_puts("v:");
+                lcd_putch(mphDigits[0] + 0x30);
+                lcd_putch(mphDigits[1] + 0x30);
+                lcd_putch('.');//decimal point
+                lcd_putch(mphDigits[2] + 0x30);
+                lcd_putch(mphDigits[3] + 0x30);
+                if(RB0 == 0) {
+                    state = Init;
+                }
+                break;
+            }
+            default:
+                state = Init;
+                break;
         }
     }
 }
