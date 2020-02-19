@@ -1,7 +1,31 @@
 /*
- * File:   main.c
- * Author: snyderc1
+ * File:   speedometer.c
+ * Authors: Conner Ozatalar and Cory Snyder
  *
+ * Final Project for Rose-Hulman ECE230 2019 Winter
+ * 
+ * The purpose of this program is to measure the average speed of objects 
+ * using the PIC16F887.  This is accomplished using two IR photo gates, each of 
+ * which is composed of an IRLED and an IR Transistor. 
+ * 
+ * The program starts off by asking for an 8 bit char on the LCD:
+ * The bits of the character represent the inches between the two photo gates
+ * RB1 and RB2 have buttons which correspond to 1 and 0 respectively, and 
+ * the user enters bits from the MSB to the LSB
+ * 
+ * The format for the inches character is as follows: XXXXX.XXX 
+ * It is unsigned and the last 3 bits represent fractional binary
+ * This means that the distance between can be anywhere from 0 to 31.875 in
+ * 
+ * Then, the main loop starts and the gates' analog voltages are being constantly
+ * read in order to detect objects that pass through.
+ * 
+ * Once an object has reached the first gate, it begins a counter that keeps 
+ * track of time to the nearest .1 ms.  This counter is stopped as soon as the 
+ * object reaches the second gate.  The average speed in miles per hour is then
+ * calculated and displayed on the LCD screen and the program waits for the 
+ * reset button to be pressed before another trial can begin
+ * 
  * Created on February 13, 2020, 10:03 AM
  */
 
@@ -62,11 +86,11 @@ void main(void) {
         while(RB1 == 1 && RB2 == 1);//wait for the 1 button or 0 button
         debounce();
         if(RB1 == 0){//The 1 button is pressed
-            CARRY = 0;//clear carry as to not shift it into the character
+            CARRY = 0;//clear carry to not accidentally carry a 1 in
             enteredInches <<= 1;//Shift a 1 in
             enteredInches++;
         } if(RB2 == 0) {//The 0 button is pressed
-            CARRY = 0;//clear carry as to not shift it into the character
+            CARRY = 0;//clear carry to not accidentally carry a 1 in
             enteredInches <<= 1;//Shift a 0 in
         }
         while(RB1 == 0 || RB2 == 0);//wait for both buttons to be released
@@ -83,7 +107,7 @@ void main(void) {
     unsigned int fractional = 0;//fractional part of inches
     unsigned long integer = 0;//integer part of inches
         
-    integer = (long)((enteredInches & 0xF8) >> 3)*10000;
+    integer = (long)((enteredInches & 0xF8) >> 3)*10000;//Mask out the fraction
     
     if(enteredInches & 0x01){//remainder 1/8 th
         fractional += 1250; 
@@ -114,7 +138,7 @@ void main(void) {
     ////////////////////////////////////////////////////////////////////////////
     //Main loop: Initially wait for the reset button to be pressed
     //
-    //           Then start reading the analog values of both phototransistors
+    //           Then start reading the analog values of both photo-transistors
     //           in order to detect an object passing through.
     //
     //           Once an object has passed through the first gate, it enables
