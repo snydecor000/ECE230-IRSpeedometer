@@ -31,61 +31,59 @@
 #define GateTransistor2 11
 
 void ADC_init(void);
-unsigned int ADC_convert(unsigned char);
-void __interrupt() interrupt_handler(void);
 void Timer_CCP_init(void);
+void Port_init(void);
+unsigned int ADC_convert(unsigned char);
+void debounce(void);
+void __interrupt() interrupt_handler(void);
 
-unsigned long timer = 0;
-unsigned char currentlyTiming = 0;
-unsigned char enteredInches = 0;
-unsigned long inches = 0;
-unsigned char inchDigits[5]; 
+unsigned long timer = 0;        //Each tick of this is 0.1 ms, records time
+unsigned char isRecording = 0;  //Variable only set when in the middle of a trial
+unsigned char enteredInches = 0;//char of user inches input 0bXXXXX.XXX
+unsigned long inches = 0;       //Inches * 10000 entered by the user in init
+unsigned char inchDigits[5];   
+unsigned char mphDigits[6];//characters representing mph
 
 void main(void) {
     lcd_init();
     ADC_init();
     Timer_CCP_init();
-    TRISB0 = 1;
-    TRISB1 = 1;
-    TRISB2 = 1;
-    nRBPU = 0;
-    ANS12 = 0;
-    ANS8 = 0;
-    ANS10 = 0;
+    Port_init();
     
-    
+    ////////////////////////////////////////////////////////////////////////////
+    //Initialization: Ask for distance between gates
+    //                Display it
+    ////////////////////////////////////////////////////////////////////////////
     lcd_goto(0);
     lcd_puts("Enter 0b Dist.");
-    for(int x = 0;x < 8; x++) {
-        lcd_goto(0x40);
-        lcd_putch(0x30 + (enteredInches & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>1) & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>2) & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>3) & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>4) & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>5) & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>6) & 0x01));
-        lcd_putch(0x30 + ((enteredInches>>7) & 0x01));
-        
-        while(RB1 == 1 && RB2 == 1);
-        for(int y = 0;y<6000;y++);//Debounce
+    lcd_goto(0x40);//Second Line of LCD
+    
+    for(int x = 0;x < 8; x++) {//Get the 8 bits of the inches byte
+        while(RB1 == 1 && RB2 == 1);//wait for the 1 button or 0 button
+        debounce();
         if(RB1 == 0){//The 1 button is pressed
-            CARRY = 0;
+            CARRY = 0;//clear carry as to not shift it into the character
             enteredInches <<= 1;//Shift a 1 in
             enteredInches++;
-
         } if(RB2 == 0) {//The 0 button is pressed
-            CARRY = 0;
+            CARRY = 0;//clear carry as to not shift it into the character
             enteredInches <<= 1;//Shift a 0 in
         }
-        while(RB1 == 0 || RB2 == 0);
-        for(int y = 0;y<6000;y++);//Debounce
+        while(RB1 == 0 || RB2 == 0);//wait for both buttons to be released
+        debounce();
+        lcd_putch(0x30 + (enteredInches & 0x01));//Put the "0/1" on the LCD
     }
     
-    unsigned int fractional = 0;
-    unsigned long decimal = 0;
+    ////////////////////////////////////////////////////////////////////////////
+    //Conversion: Convert the character representing inches from 0bXXXXX.XXX
+    //            to decimal inches * 10000 in preparation for future calcs
+    //            Output the result to the LCD in the top right where it will
+    //            stay for the rest of the program
+    ////////////////////////////////////////////////////////////////////////////
+    unsigned int fractional = 0;//fractional part of inches
+    unsigned long integer = 0;//integer part of inches
         
-    decimal = (long)((enteredInches & 0xF8) >> 3)*10000;
+    integer = (long)((enteredInches & 0xF8) >> 3)*10000;
     
     if(enteredInches & 0x01){//remainder 1/8 th
         fractional += 1250; 
@@ -95,7 +93,7 @@ void main(void) {
         fractional += 5000;
     }
     
-    inches = fractional + decimal;
+    inches = fractional + integer;
     unsigned long inchesC = inches/10;
     //Extract inches as 5 decimal digits
     for(char x = 0;x < 5;x++){
@@ -104,20 +102,36 @@ void main(void) {
     }
     
     lcd_clear();
-    lcd_goto(0x09);
+    lcd_goto(0x09);//Display the number of inches the user inputed
     lcd_putch(inchDigits[4] + 0x30);
     lcd_putch(inchDigits[3] + 0x30);
     lcd_putch('.');
     lcd_putch(inchDigits[2] + 0x30);
     lcd_putch(inchDigits[1] + 0x30);
     lcd_putch(inchDigits[0] + 0x30);
+    lcd_putch(0x22); //'"' quotation mark for inches
     
+    ////////////////////////////////////////////////////////////////////////////
+    //Main loop: Initially wait for the reset button to be pressed
+    //
+    //           Then start reading the analog values of both phototransistors
+    //           in order to detect an object passing through.
+    //
+    //           Once an object has passed through the first gate, it enables
+    //           the interrupt to allow for the timer variable to accumulate.
+    //           Then when the object passes through the second gate, it stops  
+    //           the interrupts
+    //
+    //           With the timer variable, the average miles per hour of the 
+    //           object is calculated and displayed on the LCD.
+    //           The program then waits for the reset button in order to start 
+    //           the next trial
+    ////////////////////////////////////////////////////////////////////////////
     while(RB0 == 1);//wait for start button to be pressed
-    for(int y = 0;y<6000;y++);//Debounce
+    debounce();
     while(RB0 == 0);//wait for start button to be released
-
     
-    while(1){
+    while(1){//Main Loop
         lcd_goto(0);
         lcd_puts("1: ");
         unsigned int photoVal1 = ((unsigned long)ADC_convert(GateTransistor1)*500)/1023;
@@ -127,33 +141,36 @@ void main(void) {
         lcd_puts("2: ");
         DisplayVolt(photoVal2);
         
-        if(photoVal2 > 300 && currentlyTiming == 0){
+        if(photoVal2 > 300 && isRecording == 0){//First gate becomes blocked
             PEIE = 1;
             timer = 0;
-            currentlyTiming = 1;
+            isRecording = 1;
         }
         
-        if(photoVal1 > 300 && currentlyTiming == 1){
+        if(photoVal1 > 300 && isRecording == 1){//Second gate becomes blocked
             PEIE = 0;
-            currentlyTiming = 0;
-                    
-            unsigned char digits[6];
-            unsigned char i;
+            isRecording = 0;
+            
+            //100*mph,2 decimal points
+            unsigned long mph = (unsigned long)(inches*360000)/(unsigned long)(12*528*timer);
 
-            // convert voltage value to an array of digits
-            for (i = 0; i < 6; i++) {
-                digits[5 - i] = (timer % 10);
-                timer = timer / 10;
+            // convert mph value to an array of digits
+            for (char i = 0; i < 5; i++) {
+                mphDigits[4 - i] = (mph % 10);
+                mph = mph / 10;
             }
 
-            //output significant digit left of decimal point
-            lcd_putch(digits[0] + 0x30);
-            lcd_putch(digits[1] + 0x30);
-            lcd_putch(digits[2] + 0x30);
-            lcd_putch(digits[3] + 0x30);
-            lcd_putch(digits[4] + 0x30);
-            lcd_putch(digits[5] + 0x30);
-            while(RB0 == 1);
+            //output mph to LCD
+            lcd_goto(0x48);
+            lcd_puts("v:");
+            lcd_putch(mphDigits[0] + 0x30);
+            lcd_putch(mphDigits[1] + 0x30);
+            lcd_putch(mphDigits[2] + 0x30);
+            lcd_putch('.');//decimal point
+            lcd_putch(mphDigits[3] + 0x30);
+            lcd_putch(mphDigits[4] + 0x30);
+            
+            while(RB0 == 1);//Wait for restart button to be pressed
         }
     }
 }
@@ -173,8 +190,18 @@ void Timer_CCP_init() {
 	CCP1IF = 0;                 //Reset CCP1 flag
 	CCP1IE = 1;					//Unmask (enable) Compare Interrupt from CCP1
     
-    PEIE = 0;
-    GIE = 1;
+    PEIE = 0;//Disable peripheral interrupts for now
+    GIE = 1;//Enable global interrupts
+}
+
+void Port_init() {
+    TRISB0 = 1;//RB0,1,2 inputs
+    TRISB1 = 1;
+    TRISB2 = 1;
+    nRBPU = 0;//Enable Pull-ups
+    ANS8 = 0;//RB0,1,2 digital not analog
+    ANS10 = 0;
+    ANS12 = 0;
 }
 
 void ADC_init(void) {
@@ -207,6 +234,10 @@ unsigned int ADC_convert(unsigned char analogCh) {
     GO = 1; // Start conversion ("GO" is the GO/DONE* bit)
     while (GO == 1); // Wait here while converting
     return (unsigned int) ADRESH * 256 + ADRESL; //converted 10-bit value (0 -> 1023)
+}
+
+void debounce() {
+    for(int x = 0;x<6000;x++);//6000 instructions is approx 6ms
 }
 
 void __interrupt() interrupt_handler() {
