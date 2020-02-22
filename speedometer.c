@@ -64,7 +64,7 @@ void __interrupt() interrupt_handler(void);
 unsigned long timer = 0;        //Each tick of this is 0.1 ms, records time
 unsigned char enteredInches = 0;//char of user inches input 0bXXXXX.XXX
 unsigned long inches = 0;       //Inches * 10000 entered by the user in init
-unsigned char inchDigits[5];   
+unsigned char inchDigits[5];
 unsigned char mphDigits[4];     //characters representing mph
 
 enum STATE {Init,Gate1,Gate2,Calc};
@@ -162,14 +162,15 @@ void main(void) {
             case Init://Init
                 state = Gate1;
                 break;
-            case Gate1:{//Wait for Gate 1s
+            case Gate1:{//Wait for Gate 1
                 lcd_goto(0);
                 lcd_puts("1: ");
                 unsigned int photoVal1 = ((unsigned long)ADC_convert(GateTrans1)*500)/1023;
                 DisplayVolt(photoVal1);
-                if(photoVal1 > 300) {
-                    PEIE = 1;
-                    timer = 0;
+                if(photoVal1 > 230) {
+                    PEIE = 1;       //Enable counter in interrupts
+                    timer = 0;      //reInit to 0 for new Trial
+                    RD1 = 1;        //Speed Trial in Progress
                     state = Gate2;
                 }
                 break;
@@ -179,8 +180,9 @@ void main(void) {
                 unsigned int photoVal2 = ((unsigned long)ADC_convert(GateTrans2)*500)/1023;
                 lcd_puts("2: ");
                 DisplayVolt(photoVal2);
-                if(photoVal2 > 300) {
-                    PEIE = 0;
+                if(photoVal2 > 230) {
+                    PEIE = 0;       //Disable counter in interrupts
+                    RD1 = 0;        //Speed Trial Finished
                     state = Calc;
                 }
                 break;
@@ -195,7 +197,7 @@ void main(void) {
                     mph = mph / 10;
                 }
 
-                //output mph to LCD
+                //Output mph to LCD
                 lcd_goto(0x48);
                 lcd_puts("v:");
                 lcd_putch(mphDigits[0] + 0x30);
@@ -235,13 +237,15 @@ void Timer_CCP_init() {
 }
 
 void Port_init() {
-    TRISB0 = 1;//RB0,1,2 inputs
+    TRISB0 = 1; //RB0,1,2 inputs
     TRISB1 = 1;
     TRISB2 = 1;
-    nRBPU = 0;//Enable Pull-ups
-    ANS8 = 0;//RB0,1,2 digital not analog
+    nRBPU = 0;  //Enable Pull-ups
+    ANS8 = 0;   //RB0,1,2 digital not analog
     ANS10 = 0;
     ANS12 = 0;
+    TRISD1 = 0; //RD1 Output
+    RD1 = 0;    //Clear RD1
 }
 
 void ADC_init(void) {
