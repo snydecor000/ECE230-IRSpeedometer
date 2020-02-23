@@ -43,15 +43,12 @@
 #pragma config LVP = OFF        //RB3 pin has digital I/O
 #pragma config BOR4V = BOR21V   //Brown-out Reset set to 2.1V
 #pragma config WRT = OFF        //Write protection off
-
 //Includes
 #include <xc.h>
 #include "lcd4bits.h"
-
 //# defines
 #define GateTrans1 13 //Analog Channel of IR Transistor 1
 #define GateTrans2 11 //Analog Channel of IR Transistor 2
-
 //Function Prototypes
 void ADC_init(void);
 void Timer_CCP_init(void);
@@ -59,14 +56,12 @@ void Port_init(void);
 unsigned int ADC_convert(unsigned char);
 void debounce(void);
 void __interrupt() interrupt_handler(void);
-
 //Global Variables
 unsigned long timer = 0;        //Each tick of this is 0.1 ms, records time
 unsigned char enteredInches = 0;//char of user inches input 0bXXXXX.XXX
 unsigned long inches = 0;       //Inches * 10000 entered by the user in init
 unsigned char inchDigits[5];    //characters representing inches
 unsigned char mphDigits[4];     //characters representing mph
-
 //State machine statess
 enum STATE {Init,Gate1,Gate2,Calc};
 enum STATE state = Init;
