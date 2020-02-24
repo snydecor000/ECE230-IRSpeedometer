@@ -181,24 +181,22 @@ void lcd_init() //See Section 2.2.2.2 of the Optrex LCD DMCman User Manual
 
 /*
  * Displays voltage on LCD
- * volts - volts in 100ths of volt
- * valid range : 0 -> 500
- * display: X.XX Volts
+ * digital volts
+ * valid range : 0 -> 1023
+ * display: XXXX Volts
  */
-void DisplayVolt(unsigned int volts) {
-    unsigned char digits[3];
+void DisplayDigitalVolt(unsigned int volts) {
+    unsigned char digits[4];
     unsigned char i;
     
     // convert voltage value to an array of digits
-    for (i = 0; i < 3; i++) {
-        digits[2 - i] = (volts % 10);
+    for (i = 0; i < 4; i++) {
+        digits[3 - i] = (volts % 10);
         volts = volts / 10;
     }
     
-    //output significant digit left of decimal point
     lcd_putch(digits[0] + 0x30);
-    lcd_putch('.');
-    //put last 2 digits after decimal point
     lcd_putch(digits[1] + 0x30);
     lcd_putch(digits[2] + 0x30);
+    lcd_putch(digits[3] + 0x30);
 }

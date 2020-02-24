@@ -49,6 +49,7 @@
 //# defines
 #define GateTrans1 13 //Analog Channel of IR Transistor 1
 #define GateTrans2 11 //Analog Channel of IR Transistor 2
+#define PhotoThreshold 900
 //Function Prototypes
 void ADC_init(void);
 void Timer_CCP_init(void);
@@ -156,9 +157,9 @@ void main(void) {
             case Gate1:{//Wait for object to pass through Gate 1
                 lcd_goto(0);
                 lcd_puts("1: ");
-                unsigned int photoVal1 = ((unsigned long)ADC_convert(GateTrans1)*500)/1023;
-                DisplayVolt(photoVal1);
-                if(photoVal1 > 230) {
+                unsigned int photoVal1 = ADC_convert(GateTrans1);
+                if(photoVal1 > PhotoThreshold) {
+                    DisplayDigitalVolt(photoVal1);//Display the digital voltage
                     PEIE = 1;           //Enable counter in interrupts
                     timer = 0;          //reInit to 0 for new Trial
                     RD1 = 1;            //Indicator LED on
@@ -169,10 +170,10 @@ void main(void) {
             }
             case Gate2:{//Wait for object to pass through Gate 2
                 lcd_goto(0x40);
-                unsigned int photoVal2 = ((unsigned long)ADC_convert(GateTrans2)*500)/1023;
+                unsigned int photoVal2 = ADC_convert(GateTrans2);
                 lcd_puts("2: ");
-                DisplayVolt(photoVal2);
-                if(photoVal2 > 230) {
+                if(photoVal2 > PhotoThreshold) {
+                    DisplayDigitalVolt(photoVal2);//Display the digital voltage
                     PEIE = 0;       //Disable counter in interrupts
                     RD1 = 0;        //Indicator LED off
                     state = Calc;
@@ -181,7 +182,9 @@ void main(void) {
             }
             case Calc:{//Calculate MPH and display to LCD
                 //100*mph,2 decimal points
-                unsigned long mph = (unsigned long)(inches*125)/(unsigned long)(22*timer);
+                unsigned long numerator = inches*125;
+                unsigned long denominator = 22*timer;
+                unsigned long mph = numerator/denominator;
                 
                 //convert mph value to an array of digits
                 for (char i = 0; i < 4; i++) {
@@ -273,7 +276,7 @@ void debounce() {
 
 void __interrupt() interrupt_handler() {
     if(CCP1IF == 1){
-        CCPR1 = TMR1 + 100;//100 TMR1 ticks is 0.1 ms
+        CCPR1 = TMR1 + 100;//10 TMR1 ticks is 0.1 ms
         timer++;
         CCP1IF = 0;
     }

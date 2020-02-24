@@ -3,7 +3,7 @@
  *	See lcd4bits.c for more info
  */
 
-extern void DisplayVolt( unsigned int );
+extern void DisplayDigitalVolt( unsigned int );
 
 /* delay for indicated number of milliseconds */
 extern void DelayMs(unsigned int);
